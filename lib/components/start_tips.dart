@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 class AnonymousTipsPage extends StatelessWidget {
+  const AnonymousTipsPage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

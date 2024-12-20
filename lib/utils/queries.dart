@@ -1,4 +1,5 @@
 import 'package:anonymous_chat/components/loading_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:anonymous_chat/screens/homescreen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -11,7 +12,7 @@ AndroidOptions _getAndroidOptions() => const AndroidOptions(
 
 final FlutterSecureStorage _storage =
     FlutterSecureStorage(aOptions: _getAndroidOptions());
-final String _privateKeyStorageKey = 'private_key';
+const String _privateKeyStorageKey = 'private_key';
 
 final supabase = Supabase.instance.client;
 
@@ -44,9 +45,10 @@ Future<void> generateKeys(
   await _storage.write(key: _privateKeyStorageKey, value: privateKey);
 
   // Check if the user is authenticated or if a session is active
+  final session = await supabase.auth.currentSession;
   final user = supabase.auth.currentUser;
   if (user != null) {
-    // insert user name
+    // Insert user details into the database
     await supabase.from('users').insert({
       'userid': user.id,
       'username': username,
@@ -54,13 +56,31 @@ Future<void> generateKeys(
       'publickey': publicKey,
     });
 
+    // Store the session
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('userSession', session!.accessToken);
+    
     // Navigate to the homepage
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-          builder: (context) =>
-              HomeScreen()), // Make sure HomeScreen is defined
+          builder: (context) => HomeScreen()), // Ensure HomeScreen is defined
     );
+  }
+}
+
+// ####################### RESTORE SESSION #######################
+// Call this function when your app starts to check for any saved session
+Future<void> restoreSession() async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  String? storedSession = prefs.getString('userSession');
+
+  if (storedSession != null) {
+    // If session exists, set it as the active session
+    await supabase.auth.setSession(storedSession);
+  } else {
+    // Handle case where no session exists (e.g., user needs to sign in)
+    // You could redirect to the login page or show a message
   }
 }
 

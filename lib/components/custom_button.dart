@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class CustomButton extends StatelessWidget {
-  CustomButton({
+  const CustomButton({
     this.btnName,
     this.fontsize,
     this.btnHeight,

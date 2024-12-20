@@ -39,123 +39,137 @@ class _LogInState extends State<LogIn> {
         length, (index) => allChars[random.nextInt(allChars.length)]).join();
   }
 
-  // Check if the user name exist in the database and disable button and show error text
-  Future<void> checkUsername(String value) async {
-    // Query the 'users' table to check if a username exists
-    final response = await supabase
-        .from('users')
-        .select('username')
-        .eq('username', value)
-        .maybeSingle();
+  // Check if the username exists in the database
+  Future<bool> doesUsernameExist(String value) async {
+    try {
+      final response = await supabase
+          .from('users')
+          .select('username')
+          .eq('username', value)
+          .maybeSingle();
 
-    if (response == null) {
-      setState(() {
-        disableButton = false;
-      });
-      print("username available - button disabled? $disableButton");
-    } else {
-      disableButton = true;
-      print("Username already exists - button disabled? $disableButton");
+      return response != null; // Return true if username exists
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error checking username: $e')),
+      );
+      return false; // Assume username does not exist in case of error
     }
+  }
+
+  // Perform sign-in
+  Future<void> performSignIn() async {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const LoadingScreen(
+          message: "Generating your secure keys. This may take a moment...",
+        ),
+      ),
+    );
+
+    await signInAnonymously(
+        usernameController.text, passphraseController.text, context);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-          child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // LOGO IMAGE
-            Align(
-              child: Image.asset(
-                'assets/images/splashIcon.png',
-                cacheWidth: 200,
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // LOGO IMAGE
+              Align(
+                child: Image.asset(
+                  'assets/images/splashIcon.png',
+                  width: 200,
+                ),
               ),
-            ),
-            // INTO TEXT
-            Align(
-              child: Text(
-                'A N O C H A T',
-                style: AppTheme.SubtitleText,
+              // INTRO TEXT
+              Align(
+                child: Text(
+                  'A N O C H A T',
+                  style: AppTheme.SubtitleText,
+                ),
               ),
-            ),
-            Text(''),
-            //USERNAME FIELD
-            Text(
-              'UserName',
-              style: AppTheme.LabelText,
-            ),
-            CustomTextfield(
-              controller: usernameController,
-              hintText: 'i.e that dosn\'t relate to you',
-              onChange: (value) => checkUsername(value),
-            ),
-            // Passcode Field
-            Text(
-              'Passphrase',
-              style: AppTheme.LabelText,
-            ),
-            CustomTextfield(
-              controller: passphraseController,
-              hintText: 'press generate passphrase',
-              readOnly: true,
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
+              const SizedBox(height: 8.0),
+              // USERNAME FIELD
+              Text(
+                'UserName',
+                style: AppTheme.LabelText,
+              ),
+              CustomTextfield(
+                controller: usernameController,
+                hintText: 'i.e that doesn\'t relate to you',
+              ),
+              // PASSPHRASE FIELD
+              Text(
+                'Passphrase',
+                style: AppTheme.LabelText,
+              ),
+              CustomTextfield(
+                controller: passphraseController,
+                hintText: 'press generate passphrase',
+                readOnly: true,
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
                   onPressed: () {
-                    // set the readonly passphrase field text to a value from generated passphrase
+                    // Generate passphrase
                     setState(() {
                       passphraseController.text = generatePassphrase(32);
                     });
-                    // check if all the field are empty and shoe snackbar if they are empty
+
+                    // Check if all fields are empty and show snackbar if they are
                     if (usernameController.text.isEmpty &&
                         passphraseController.text.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Please fill in all fields')));
+                        const SnackBar(content: Text('Please fill in all fields')),
+                      );
                     }
                   },
-                  child: Text(
-                    'generate passcode',
-                  )),
-            ),
-
-            // SIGN IN ANONYMOUSLY
-            CustomButton(
+                  child: const Text('generate passcode'),
+                ),
+              ),
+              // CONTINUE BUTTON
+              CustomButton(
                 btnName: 'Continue',
-                onTap: disableButton
-                    ? null
-                    : () {
-                        // Show the loading screen
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const LoadingScreen(
-                              message:
-                                  "Generating your secure keys. This may take a moment...",
-                            ),
-                          ),
-                        );
-                        signInAnonymously(usernameController.text,
-                            passphraseController.text, context);
-                      }),
+                onTap: () async {
+                  final usernameExists =
+                      await doesUsernameExist(usernameController.text);
 
-            // Anonymity tips and explanations
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                  onPressed: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (ctx) => AnonymousTipsPage())),
-                  child: Text(
-                    'Safety tips',
-                  )),
-            ),
-          ],
+                  if (usernameExists) {
+                    // Show error snackbar if username exists
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Username already exists. Please try another.'),
+                      ),
+                    );
+                  } else {
+                    // Proceed with sign-in and routing
+                    await performSignIn();
+                  }
+                },
+              ),
+              // ANONYMITY TIPS
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (ctx) => AnonymousTipsPage()),
+                  ),
+                  child: const Text('Safety tips'),
+                ),
+              ),
+            ],
+          ),
         ),
-      )),
+      ),
     );
   }
 }

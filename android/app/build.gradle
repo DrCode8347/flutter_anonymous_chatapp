@@ -48,12 +48,14 @@ android {
 
         }
     }
-    // CUSTOMIZE THE OUTPUT APK NAME
-        applicationVariants.all { variant ->
-        variant.outputs.all { output ->
-            def newName = "Anochat v${variant.buildType.name}.apk"
-            output.outputFileName = newName
-        }
+    
+}
+
+// block to customize the APK file name
+android.applicationVariants.all { variant ->
+    variant.outputs.all { output ->
+        def newName = "AnoChat-${variant.buildType.name}.apk" // Replace 'AnoChat' with your desired app name
+        output.outputFileName = newName
     }
 }
 

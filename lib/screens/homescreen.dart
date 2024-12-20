@@ -1,9 +1,13 @@
 import 'package:anonymous_chat/screens/chat_screen.dart';
 import 'package:anonymous_chat/screens/start_chat.dart';
+import 'package:custom_refresh_indicator/custom_refresh_indicator.dart';
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -22,7 +26,19 @@ class _HomeScreenState extends State<HomeScreen> {
     userId = _supabase.auth.currentUser?.id;
   }
 
-  fetchChatroom() async {
+  Future<void> refreshData() async {
+    // Simulate a delay for the refresh indicator
+    await Future.delayed(Duration(seconds: 2));
+
+    // This will trigger the StreamBuilder to rebuild by updating the stream
+    setState(() {
+      userId = _supabase.auth.currentUser?.id; // Refresh user ID if necessary
+    });
+
+    print('Data reloaded successfully');
+  }
+
+  Stream<dynamic> fetchChatrooms() {
     final response = _supabase
         .from('chat_rooms')
         .select('''
@@ -45,10 +61,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return response;
   }
 
-  Stream<dynamic> _refreshData() {
-    return fetchChatroom();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -57,133 +69,150 @@ class _HomeScreenState extends State<HomeScreen> {
         automaticallyImplyLeading: false,
         centerTitle: true,
       ),
-      body: userId == null
-          ? Center(
-              child: Text(
-                "No user logged in",
-                style: Theme.of(context).textTheme.bodyLarge,
+      body: SingleChildScrollView(
+        child: CustomMaterialIndicator(
+          onRefresh: refreshData, // Your refresh logic
+          backgroundColor: Colors.white,
+          indicatorBuilder: (context, controller) {
+            return Padding(
+              padding: const EdgeInsets.all(6.0),
+              child: CircularProgressIndicator(
+                color: Colors.redAccent,
+                value: controller.state.isLoading
+                    ? null
+                    : math.min(controller.value, 1.0),
               ),
-            )
-          : StreamBuilder(
-              stream: fetchChatroom(),
-              builder: (BuildContext context, AsyncSnapshot snapshot) {
-                // Handle loading state
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: CircularProgressIndicator());
-                }
-
-                // Handle errors
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text("Error: ${snapshot.error}"),
-                  );
-                }
-
-                // Handle empty data
-                if (!snapshot.hasData || snapshot.data.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Image.asset(
-                          'assets/images/splashIcon.png',
-                          width: 250,
-                        ),
-                        Text('No chats available')
-                      ],
+            );
+          },
+          child: userId == null
+              ? Column(
+                  children: [
+                    Text(
+                      "No user logged in",
+                      style: Theme.of(context).textTheme.bodyLarge,
                     ),
-                  );
-                }
+                    TextButton(onPressed: refreshData, child: Text('Refresh')),
+                  ],
+                )
+              : StreamBuilder(
+                  stream: fetchChatrooms(),
+                  builder: (BuildContext context, AsyncSnapshot snapshot) {
+                    // Handle loading state
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(child: CircularProgressIndicator());
+                    }
 
-                // Display chat rooms
-                final chatRooms = snapshot.data as List<dynamic>;
-
-                return RefreshIndicator(
-                  onRefresh: fetchChatroom(), // Trigger the refresh function
-                  child: ListView.builder(
-                    itemCount: chatRooms.length,
-                    itemBuilder: (context, index) {
-                      final chat = chatRooms[index];
-
-                      return Card(
-                        margin:
-                            EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                        child: ListTile(
-                          leading: Stack(
-                            children: [
-                              CircleAvatar(
-                                backgroundColor: Theme.of(context)
-                                    .primaryColor
-                                    .withOpacity(0.2),
-                                radius: 25,
-                                child: Text(
-                                  chat['name']?.substring(0, 1) ??
-                                      "A", // First letter of chat name
-                                  style: TextStyle(
-                                    color: Theme.of(context).primaryColor,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 20,
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                bottom: 2,
-                                right: 2,
-                                child: Container(
-                                  width: 12,
-                                  height: 12,
-                                  decoration: BoxDecoration(
-                                    color: chat['is_group'] == true
-                                        ? Colors.green
-                                        : Colors.grey,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                        color: Colors.white, width: 2),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          title: Text(
-                            chat['name'] ?? "Chat ${index + 1}",
-                            style: TextStyle(
-                                color: Theme.of(context).primaryColor),
-                          ),
-                          subtitle: Text(
-                            chat['is_group'] == true
-                                ? "Group Chat"
-                                : "One-to-One Chat",
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                chat['created_at'] != null
-                                    ? _formatDate(chat['created_at'])
-                                    : "N/A",
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ChatScreen(
-                                  chatId: chat['id'],
-                                  receiverId: '', // Replace as needed
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                    // Handle errors
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Text("Error: ${snapshot.error}"),
                       );
-                    },
-                  ),
-                );
-              },
-            ),
+                    }
+
+                    // Handle empty data
+                    if (!snapshot.hasData || snapshot.data.isEmpty) {
+                      return Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Image.asset(
+                            'assets/images/splashIcon.png',
+                            width: 250,
+                          ),
+                          Text('No chats available'),
+                          TextButton(
+                              onPressed: refreshData, child: Text('Refresh')),
+                        ],
+                      );
+                    }
+
+                    // Display chat rooms
+                    final chatRooms = snapshot.data as List<dynamic>;
+
+                    return ListView.builder(
+                      itemCount: chatRooms.length,
+                      itemBuilder: (context, index) {
+                        final chat = chatRooms[index];
+
+                        return Card(
+                          margin:
+                              EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                          child: ListTile(
+                            leading: Stack(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: Theme.of(context)
+                                      .primaryColor
+                                      .withOpacity(0.2),
+                                  radius: 25,
+                                  child: Text(
+                                    chat['name']?.substring(0, 1) ??
+                                        "A", // First letter of chat name
+                                    style: TextStyle(
+                                      color: Theme.of(context).primaryColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 20,
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: 2,
+                                  right: 2,
+                                  child: Container(
+                                    width: 12,
+                                    height: 12,
+                                    decoration: BoxDecoration(
+                                      color: chat['is_group'] == true
+                                          ? Colors.green
+                                          : Colors.grey,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                          color: Colors.white, width: 2),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            title: Text(
+                              chat['name'] ?? "Chat ${index + 1}",
+                              style: TextStyle(
+                                  color: Theme.of(context).primaryColor),
+                            ),
+                            subtitle: Text(
+                              chat['is_group'] == true
+                                  ? "Group Chat"
+                                  : "One-to-One Chat",
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            trailing: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  chat['created_at'] != null
+                                      ? _formatDate(chat['created_at'])
+                                      : "N/A",
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ChatScreen(
+                                    chatId: chat['id'],
+                                    receiverId: '',
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           // Navigate to create group or new chat screen
